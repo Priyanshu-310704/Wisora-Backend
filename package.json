@@ -1,0 +1,13 @@
+{
+  "name": "wisora-backend",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "Priyanshu",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "test": "npm run dev",
+    "start": "node server.js"
+  }
+}
