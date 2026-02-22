@@ -4,7 +4,7 @@ const Topic = require("../models/Topic");
 
 exports.createQuestion = async (req, res, next) => {
   try {
-    const { title, body, topics } = req.body;
+    const { title, body, topics, images } = req.body;
 
     if (!title || !body) {
       return res.status(400).json({ message: "Title and body are required" });
@@ -31,6 +31,7 @@ exports.createQuestion = async (req, res, next) => {
     const question = await Question.create({
       title,
       body,
+      images,
       topics: topicIds,
       user: req.user,
     });
