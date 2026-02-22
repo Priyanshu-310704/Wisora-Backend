@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const Question = require("../models/Question");
 const Answer = require("../models/Answer");
+const cloudinary = require("../config/cloudinary");
 
 exports.getUser = async (req, res, next) => {
   try {
@@ -29,7 +30,7 @@ exports.getUser = async (req, res, next) => {
 
 exports.updateUser = async (req, res, next) => {
   try {
-    const { username, bio } = req.body;
+    const { username, bio, profilePicture, coverImage } = req.body;
 
     // Only allow updating own profile
     if (req.params.id !== req.user) {
@@ -42,6 +43,20 @@ exports.updateUser = async (req, res, next) => {
     if (username) user.username = username;
     if (bio !== undefined) user.bio = bio;
 
+    if (profilePicture && profilePicture.startsWith("data:image")) {
+      const uploadRes = await cloudinary.uploader.upload(profilePicture, {
+        folder: "wisora/profiles",
+      });
+      user.profilePicture = uploadRes.secure_url;
+    }
+
+    if (coverImage && coverImage.startsWith("data:image")) {
+      const uploadRes = await cloudinary.uploader.upload(coverImage, {
+        folder: "wisora/covers",
+      });
+      user.coverImage = uploadRes.secure_url;
+    }
+
     await user.save();
 
     res.json({
@@ -49,6 +64,8 @@ exports.updateUser = async (req, res, next) => {
       username: user.username,
       email: user.email,
       bio: user.bio,
+      profilePicture: user.profilePicture,
+      coverImage: user.coverImage,
     });
   } catch (err) {
     next(err);

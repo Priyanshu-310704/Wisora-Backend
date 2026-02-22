@@ -76,3 +76,15 @@ exports.deleteAnswer = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getUserAnswers = async (req, res, next) => {
+  try {
+    const answers = await Answer.find({ user: req.params.userId })
+      .populate("question", "title")
+      .sort({ createdAt: -1 });
+
+    res.json(answers);
+  } catch (err) {
+    next(err);
+  }
+};

@@ -6,10 +6,12 @@ const {
   getAnswersByQuestion,
   updateAnswer,
   deleteAnswer,
+  getUserAnswers,
 } = require("../controllers/answerController");
 
 router.post("/:questionId", protect, createAnswer);
 router.get("/question/:questionId", getAnswersByQuestion);
+router.get("/user/:userId", getUserAnswers);
 router.put("/:id", protect, updateAnswer);
 router.delete("/:id", protect, deleteAnswer);
 

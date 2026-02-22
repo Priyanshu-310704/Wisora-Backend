@@ -1,6 +1,7 @@
 const Question = require("../models/Question");
 const Answer = require("../models/Answer");
 const Topic = require("../models/Topic");
+const cloudinary = require("../config/cloudinary");
 
 exports.createQuestion = async (req, res, next) => {
   try {
@@ -8,6 +9,17 @@ exports.createQuestion = async (req, res, next) => {
 
     if (!title || !body) {
       return res.status(400).json({ message: "Title and body are required" });
+    }
+
+    // Upload images to Cloudinary if provided
+    let imageUrls = [];
+    if (images && images.length > 0) {
+      for (const image of images) {
+        const uploadRes = await cloudinary.uploader.upload(image, {
+          folder: "wisora/questions",
+        });
+        imageUrls.push(uploadRes.secure_url);
+      }
     }
 
     // If topics are provided as names (strings), resolve them to ObjectIds
@@ -31,7 +43,7 @@ exports.createQuestion = async (req, res, next) => {
     const question = await Question.create({
       title,
       body,
-      images,
+      images: imageUrls,
       topics: topicIds,
       user: req.user,
     });
