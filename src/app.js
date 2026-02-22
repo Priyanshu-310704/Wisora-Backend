@@ -12,6 +12,8 @@ const answerRoutes = require("./routes/answerRoutes");
 const commentRoutes = require("./routes/commentRoutes");
 const topicRoutes = require("./routes/topicRoutes");
 const likeRoutes = require("./routes/likeRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const groupRoutes = require("./routes/groupRoutes");
 
 const app = express();
 
@@ -36,6 +38,8 @@ app.use("/api/answers", answerRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/topics", topicRoutes);
 app.use("/api/likes", likeRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/groups", groupRoutes);
 
 app.use(errorHandler);
 

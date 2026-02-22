@@ -9,6 +9,8 @@ const sanitizeUser = (user) => ({
   username: user.username,
   email: user.email,
   bio: user.bio || "",
+  profilePicture: user.profilePicture || "",
+  coverImage: user.coverImage || "",
   followers: user.followers || [],
   following: user.following || [],
   createdAt: user.createdAt,

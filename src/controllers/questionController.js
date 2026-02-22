@@ -1,14 +1,26 @@
 const Question = require("../models/Question");
 const Answer = require("../models/Answer");
 const Topic = require("../models/Topic");
+const User = require("../models/User");
+const Notification = require("../models/Notification");
+const Like = require("../models/Like");
+const Group = require("../models/Group");
 const cloudinary = require("../config/cloudinary");
 
 exports.createQuestion = async (req, res, next) => {
   try {
-    const { title, body, topics, images } = req.body;
+    const { title, body, topics, images, groupId } = req.body;
 
     if (!title || !body) {
       return res.status(400).json({ message: "Title and body are required" });
+    }
+
+    // Verify group membership if part of a group
+    if (groupId) {
+      const group = await Group.findById(groupId);
+      if (!group || !group.members.includes(req.user)) {
+        return res.status(403).json({ message: "Not authorized to post in this group" });
+      }
     }
 
     // Upload images to Cloudinary if provided
@@ -46,10 +58,23 @@ exports.createQuestion = async (req, res, next) => {
       images: imageUrls,
       topics: topicIds,
       user: req.user,
+      group: groupId || null
     });
 
+    // Notify followers of the poster
+    const user = await User.findById(req.user).select("followers");
+    if (user && user.followers.length > 0) {
+      const notifications = user.followers.map(followerId => ({
+        recipient: followerId,
+        sender: req.user,
+        type: "question",
+        question: question._id
+      }));
+      await Notification.insertMany(notifications);
+    }
+
     const populated = await Question.findById(question._id)
-      .populate("user", "username")
+      .populate("user", "username profilePicture")
       .populate("topics", "name");
 
     res.status(201).json(populated);
@@ -64,8 +89,11 @@ exports.getQuestions = async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const questions = await Question.find()
-      .populate("user", "username")
+    // Only show public questions (no group)
+    const query = { group: null };
+
+    const questions = await Question.find(query)
+      .populate("user", "username profilePicture")
       .populate("topics", "name")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -79,7 +107,7 @@ exports.getQuestions = async (req, res, next) => {
       })
     );
 
-    const total = await Question.countDocuments();
+    const total = await Question.countDocuments(query);
 
     res.json({
       questions: questionsWithCounts,
@@ -95,11 +123,19 @@ exports.getQuestions = async (req, res, next) => {
 exports.getQuestionById = async (req, res, next) => {
   try {
     const question = await Question.findById(req.params.id)
-      .populate("user", "username")
-      .populate("topics", "name");
+      .populate("user", "username profilePicture")
+      .populate("topics", "name")
+      .populate("group", "name isPrivate members");
 
     if (!question) {
       return res.status(404).json({ message: "Question not found" });
+    }
+
+    // Verify group privacy if part of a group
+    if (question.group && question.group.isPrivate) {
+      if (!req.user || !question.group.members.some(id => id.toString() === req.user.toString())) {
+        return res.status(403).json({ message: "Access denied. Private group question." });
+      }
     }
 
     const answerCount = await Answer.countDocuments({ question: question._id });
@@ -113,7 +149,7 @@ exports.getQuestionById = async (req, res, next) => {
 exports.searchQuestions = async (req, res, next) => {
   try {
     const { text, tag } = req.query;
-    let filter = {};
+    let filter = { group: null };
 
     if (text && text.trim()) {
       filter.$text = { $search: text };
@@ -131,7 +167,7 @@ exports.searchQuestions = async (req, res, next) => {
     }
 
     const questions = await Question.find(filter)
-      .populate("user", "username")
+      .populate("user", "username profilePicture")
       .populate("topics", "name")
       .sort({ createdAt: -1 })
       .limit(50);
@@ -153,11 +189,50 @@ exports.searchQuestions = async (req, res, next) => {
 exports.getUserQuestions = async (req, res, next) => {
   try {
     const questions = await Question.find({ user: req.params.userId })
-      .populate("user", "username")
+      .populate("user", "username profilePicture")
       .populate("topics", "name")
       .sort({ createdAt: -1 });
 
     res.json(questions);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.deleteQuestion = async (req, res, next) => {
+  try {
+    const question = await Question.findById(req.params.id);
+
+    if (!question) {
+      return res.status(404).json({ message: "Question not found" });
+    }
+
+    if (question.user.toString() !== req.user) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Capture answers before deleting question
+    const answers = await Answer.find({ question: question._id });
+    const answerIds = answers.map(a => a._id);
+
+    // 1. Delete all answers
+    await Answer.deleteMany({ question: question._id });
+
+    // 2. Delete all likes for this question and its answers
+    await Like.deleteMany({ 
+      $or: [
+        { targetId: question._id, targetType: "Question" },
+        { targetId: { $in: answerIds }, targetType: "Answer" }
+      ]
+    });
+
+    // 3. Delete all notifications related to this question
+    await Notification.deleteMany({ question: question._id });
+
+    // 4. Delete the question itself
+    await question.deleteOne();
+
+    res.json({ message: "Question and all associated data deleted" });
   } catch (err) {
     next(err);
   }

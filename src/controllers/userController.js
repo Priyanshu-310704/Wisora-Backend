@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const Question = require("../models/Question");
 const Answer = require("../models/Answer");
+const Notification = require("../models/Notification");
 const cloudinary = require("../config/cloudinary");
 
 exports.getUser = async (req, res, next) => {
@@ -75,9 +76,9 @@ exports.updateUser = async (req, res, next) => {
 exports.toggleFollow = async (req, res, next) => {
   try {
     const currentUser = await User.findById(req.user);
-    const targetUser = await User.findById(req.params.targetId);
+    const userToFollow = await User.findById(req.params.targetId);
 
-    if (!targetUser) {
+    if (!userToFollow) {
       return res.status(404).json({ message: "User not found" });
     }
 
@@ -86,29 +87,73 @@ exports.toggleFollow = async (req, res, next) => {
     }
 
     const isFollowing = currentUser.following.some(
-      (id) => id.toString() === targetUser._id.toString()
+      (id) => id.toString() === userToFollow._id.toString()
     );
 
     if (isFollowing) {
       // Unfollow
       currentUser.following = currentUser.following.filter(
-        (id) => id.toString() !== targetUser._id.toString()
+        (id) => id.toString() !== userToFollow._id.toString()
       );
-      targetUser.followers = targetUser.followers.filter(
+      userToFollow.followers = userToFollow.followers.filter(
         (id) => id.toString() !== currentUser._id.toString()
       );
       await currentUser.save();
-      await targetUser.save();
-      return res.json({ following: false, message: "User unfollowed" });
+      await userToFollow.save();
+      res.json({ following: false, message: "User unfollowed" });
+    } else {
+      // Follow
+      currentUser.following.push(userToFollow._id);
+      userToFollow.followers.push(currentUser._id);
+      
+      await currentUser.save();
+      await userToFollow.save();
+
+      // Create notification
+      await Notification.create({
+        recipient: userToFollow._id,
+        sender: req.user,
+        type: "follow",
+      });
+
+      res.json({ following: true, message: "User followed" });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getSuggestedUsers = async (req, res, next) => {
+  try {
+    const currentUser = await User.findById(req.user);
+    
+    // Get 5 users that the current user doesn't follow and aren't themselves
+    const suggested = await User.find({
+      _id: { $nin: [...currentUser.following, currentUser._id] }
+    })
+    .select("username profilePicture bio")
+    .limit(5);
+
+    res.json(suggested);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getCommunityUsers = async (req, res, next) => {
+  try {
+    const { search } = req.query;
+    let query = { _id: { $ne: req.user } };
+    
+    if (search) {
+      query.username = { $regex: search, $options: "i" };
     }
 
-    // Follow
-    currentUser.following.push(targetUser._id);
-    targetUser.followers.push(currentUser._id);
-    await currentUser.save();
-    await targetUser.save();
+    const users = await User.find(query)
+      .select("username profilePicture bio followers following")
+      .limit(50);
 
-    res.json({ following: true, message: "User followed" });
+    res.json(users);
   } catch (err) {
     next(err);
   }
